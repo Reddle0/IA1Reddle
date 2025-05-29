@@ -15,6 +15,11 @@
 # 15/01/24 Fix for Edna pool party (now shows up during revisits) and Kacey stall revisit.
 # 26/01/24 Moved code from "cru_patch" patch into this file. Remove the "cru_patch" from your Leftovers folder if it's still in there. A patch should no longer be required. #
 # 17/02/25 Updated code for new formatting, and added Kacey and Vicky bust art to the pool party selection dialogue
+# 05/03/25 Overhauls the mechanics for Cru's Epilogue Remake Mod if detected, tracking impregnation properly and such
+# 06/03/25 Further code tweaks for Cru's Remake Mod, also added impreg stuff to debug
+
+# 27/04/25 Added an addiitonal Ren'py.exists check that prevents a crash if you only have Leftovers installed
+# 16/05/25 Moved Nate bedroom debug stuff into a new .rpy
 
 #eye glisten image fix for photo epilogue #
 init 100 python:
@@ -30,23 +35,84 @@ default edna_impreg = False
 default kacey_impreg = False
 default vicky_impreg = False
 
+default epilogue_pregnancy_leftovers_phase_1_complete = False
+
+# if everyone is impregnated
+init 100 python:
+    def got_everyone_pregnant():
+        if all([store.sam_impreg, store.kira_impreg, store.simone_impreg, store.julia_impreg, store.janet_impreg, store.edna_impreg, store.kacey_impreg, store.vicky_impreg]):
+            return true
+
+# Debug #
 label debug_impreg:
-    "WARNING: Only works if impreg_override.rpy is detected in the \"game/mods\" folder."
-    $ sam_impreg = True
-    $ kira_impreg = True
-    $ simone_impreg = True
-    $ julia_impreg = True
-    $ janet_impreg = True
-    $ edna_impreg = True
-    $ kacey_impreg = True
-    $ vicky_impreg = True
-    "Set everyone to pregnant state."
+    $ store.sam_impreg = True
+    $ store.kira_impreg = True
+    $ store.simone_impreg = True
+    $ store.julia_impreg = True
+    $ store.janet_impreg = True
+    $ store.edna_impreg = True
+    $ store.kacey_impreg = True
+    $ store.vicky_impreg = True
+    "Set everyone to impreg state."
     if started_main_game:
         $ advance_time_return_location.start()
     return
 
-# Overrides #
-init 300 python:
+label debug_unpreg:
+    $ store.sam_impreg = False
+    $ store.kira_impreg = False
+    $ store.simone_impreg = False
+    $ store.julia_impreg = False
+    $ store.janet_impreg = False
+    $ store.edna_impreg = False
+    $ store.kacey_impreg = False
+    $ store.vicky_impreg = False
+    "Removed impreg state from everyone."
+    if started_main_game:
+        $ advance_time_return_location.start()
+    return
+
+label debug_impreg_2:
+    "Checks impreg variables to see who's been impregnated."
+    if store.sam_impreg:
+        "[sa.say_name] has been impregnated."
+    else:
+        "[sa.say_name] has not been impregnated."  
+    if store.kira_impreg:
+        "[k.say_name] has been impregnated."
+    else:
+        "[k.say_name] has not been impregnated."  
+    if store.simone_impreg:
+        "[si.say_name] has been impregnated."
+    else:
+        "[si.say_name] has not been impregnated."  
+    if store.julia_impreg:
+        "[julia.say_name] has been impregnated."
+    else:
+        "[julia.say_name] has not been impregnated."  
+    if store.janet_impreg:
+        "[janet.say_name] has been impregnated."
+    else:
+        "[janet.say_name] has not been impregnated."  
+    if store.edna_impreg:
+        "[edna.say_name] has been impregnated."
+    else:
+        "[edna.say_name] has not been impregnated."  
+    if store.kacey_impreg:
+        "[gloryhole_girl.say_name] has been impregnated."
+    else:
+        "[gloryhole_girl.say_name] has not been impregnated."  
+    if store.vicky_impreg:
+        "[vicky.say_name] has been impregnated."
+    else:
+        "[vicky.say_name] has not been impregnated."  
+
+    if started_main_game:
+        $ advance_time_return_location.start()
+    return
+
+# Base Game Overrides #
+init 200 python:
     config.label_overrides["julia_scene_vaginal_revisit_2nd_time"] = "julia_scene_vaginal_revisit_2nd_time_impreg_override" # julia vaginal 2nd revisit
     config.label_overrides["janet_scene_vaginal_revisit_2nd_time"] = "janet_scene_vaginal_revisit_2nd_time_impreg_override" # janet vaginal 2nd revisit
     config.label_overrides["gloryhole_scene_stall_sex"] = "gloryhole_scene_stall_sex_impreg_override" # kacey initial stall scene
@@ -58,11 +124,12 @@ init 300 python:
     config.label_overrides["finale_scene_revisit_fuck_choices"] = "finale_scene_revisit_fuck_choices_impreg_override" # edna pool party impreg revisit
     config.label_overrides["finale_scene_end"] = "finale_scene_end_impreg_override" # edna pool party 2/2
 
-init 2 python:
+# v1.2 compat
+init 200 python:
     config.label_overrides["epilogue_1"] = "epilogue_override" # v1.2 compat
 
 # Leftovers Epilogue Choices #
-init 2 python:
+init 50 python:
     leftovers_old_epilogue_pregnant_unpregnant_choices = epilogue_pregnant_unpregnant_choices
 
     def leftovers_epilogue_pregnant_unpregnant_choices():
@@ -74,14 +141,128 @@ init 2 python:
             choice_list.remove( ("{i}I got everyone pregnant!{/i}", "epilogue_pregnancy") )
 
         if got_everyone_pregnant:
-            choice_list.append( ("(Leftovers Mod) {i}I got everyone pregnant!{/i}", "epilogue_pregnancy_leftovers") )
-
+            choice_list.append( ("{i}I got everyone pregnant!{/i}", "epilogue_pregnancy_leftovers_phase_1") )
         else:
-            choice_list.append( ("(Leftovers Mod) {i}I wonder who I got pregnant?{/i}", "epilogue_pregnancy_leftovers") )
+            choice_list.append( ("{i}I wonder who I got pregnant?{/i}", "epilogue_pregnancy_leftovers_phase_1") )
 
         return choice_list
 
     epilogue_pregnant_unpregnant_choices = leftovers_epilogue_pregnant_unpregnant_choices
+
+# Overrides for Cru's Mod #
+init 2 python:
+    if renpy.exists('mods/pregnancy_epilogue_remake_mod/scripts/pregnancy_epilogue_remake_menu.rpy'):
+        config.label_overrides["pregnancy_epilogue_remake_mod_choice"] = "pregnancy_epilogue_remake_mod_choice_leftovers"
+        config.label_overrides["pregnancy_epilogue_remake_mod_choice_menu"] = "pregnancy_epilogue_remake_mod_choice_menu_leftovers"
+        config.label_overrides["pregnancy_epilogue_remake_mod_end"] = "epilogue_pregnancy_leftovers_phase_2"
+
+label pregnancy_epilogue_remake_mod_choice_leftovers:
+# label override required to explain the new mechanics
+    $ epilogue_pregnancy_completed = True
+    $ store.pregnancy_epilogue_remake_mod_detected = True
+    $ store.pregnancy_epilogue_remake_mod_start = True
+
+    $ got_everyone_pregnant = all([store.sam_impreg, store.kira_impreg, store.simone_impreg, store.julia_impreg, store.janet_impreg, store.edna_impreg, store.kacey_impreg, store.vicky_impreg])
+
+    hide family_milf_layer
+    hide nate_layer
+    hide julia_sam_layer
+    hide nonrelated_layer
+    $ stop_music(fadeout=1)
+    call fade_to_black(2)
+
+    window hide
+    pause 1
+
+    window show
+    "{i}Detected that both \"Leftovers Mod\" and \"Cru Epilogue Remake Mod\" mods are active.{/i}" 
+    "{i}A (COMBINED) version of the pregnancy epilogue will play, with features from both mods.{/i}" 
+
+    window hide
+    pause 1
+
+    "{i}Several months later...{/i}"
+
+    window hide
+    pause 1
+    "{i}You now have the option to select an epilogue you would like to see for a specific girl.{/i}"
+    "{i}Note that only the girls you have impregnated will appear on this list.{/i}"
+    if got_everyone_pregnant:
+        "{i}Since you have already done that, all pregnancy epilogues will now be available to you!{/i}"
+    else:
+        "{i}To unlock the full list, impregnate them all!{/i}"
+        "{i}Then, replay this epilogue by clicking \"View the Epilogue\" in Nate's bedroom.{/i}"
+
+    "{i}You can end the game at any time by choosing the \"End\" option.{/i}"
+
+    call pregnancy_epilogue_remake_mod_choice_menu_leftovers
+
+label pregnancy_epilogue_remake_mod_choice_menu_leftovers:
+    $ play_music("audio/music/Dreamland_02.ogg", fadeout=1)
+
+    python:
+        "{i}Select a scene:{/i}"
+        choice_list = []
+
+        # Both options have been combined into one.
+        # Clicking "I wonder who I got pregnant" will now open up the Cru Mod selection...
+        # But ONLY girls you actually impregnated ("x_impreg" variable equals true) will appear on this list!
+
+        if store.kira_impreg:
+            choice_list.append( ("[k.say_name]", "pregnancy_epilogue_remake_mod_chosen_kira") )
+        if store.simone_impreg:
+            choice_list.append( ("[si.say_name]", "pregnancy_epilogue_remake_mod_chosen_simone") )
+        if finale_scene_completed_with_julia_sam:
+            if store.sam_impreg:
+                choice_list.append( ("[sa.say_name]", "pregnancy_epilogue_remake_mod_chosen_sam") )
+            if store.julia_impreg:
+                choice_list.append( ("[julia.say_name]", "pregnancy_epilogue_remake_mod_chosen_julia") )
+        if store.janet_impreg:
+            choice_list.append( ("[janet.say_name]", "pregnancy_epilogue_remake_mod_chosen_janet") )
+        if store.edna_impreg:
+            choice_list.append( ("[edna.say_name]", "pregnancy_epilogue_remake_mod_chosen_edna") )
+        if store.kacey_impreg:
+            choice_list.append( ("[gloryhole_girl.say_name]", "pregnancy_epilogue_remake_mod_chosen_gloryhole_girl") )
+        if store.vicky_impreg:
+            choice_list.append( ("[vicky.say_name]", "pregnancy_epilogue_remake_mod_chosen_vicky") )
+
+        choice_list.append( ("End", "pregnancy_epilogue_remake_mod_end") )
+
+        chosen_option = renpy.display_menu(choice_list)
+
+    if chosen_option == "End":
+        call pregnancy_epilogue_remake_mod_end()
+    else:
+        $ renpy.call(chosen_option)
+
+        return
+
+# overriding the method in Cru's mod, removing the added option from Cru's mod and combining the existing Leftovers Mod one
+init 200 python: # must be higher than cru's override of the method, which uses 99 as priority
+    if renpy.exists('mods/pregnancy_epilogue_remake_mod/scripts/pregnancy_epilogue_remake_menu.rpy'):
+        old_epilogue_pregnant_unpregnant_choices_cru_leftovers = epilogue_pregnant_unpregnant_choices
+
+        def leftovers_cru_epilogue_pregnant_unpregnant_choices():
+            choice_list = old_epilogue_pregnant_unpregnant_choices_cru_leftovers()
+
+            got_everyone_pregnant = all([store.sam_impreg, store.kira_impreg, store.simone_impreg, store.julia_impreg, store.janet_impreg, store.edna_impreg, store.kacey_impreg, store.vicky_impreg])
+
+            choice_list = [choice for choice in choice_list if choice[1] != "pregnancy_epilogue_remake_mod_choice"]
+
+            if ("{i}I got everyone pregnant!{/i}", "epilogue_pregnancy_leftovers_phase_1") in choice_list:
+                choice_list.remove( ("{i}I got everyone pregnant!{/i}", "epilogue_pregnancy_leftovers_phase_1") )
+
+            if ("{i}I wonder who I got pregnant?{/i}", "epilogue_pregnancy_leftovers_phase_1") in choice_list:
+                choice_list.remove( ("{i}I wonder who I got pregnant?{/i}", "epilogue_pregnancy_leftovers_phase_1") )
+
+            if got_everyone_pregnant:
+                choice_list.append( ("(COMBINED) {i}I got everyone pregnant!{/i}", "pregnancy_epilogue_remake_mod_choice_leftovers") )
+            else:
+                choice_list.append( ("(COMBINED) {i}I wonder who I got pregnant?{/i}", "pregnancy_epilogue_remake_mod_choice_leftovers") )
+
+            return choice_list
+
+        epilogue_pregnant_unpregnant_choices = leftovers_cru_epilogue_pregnant_unpregnant_choices
 
 # CG Gallery #
 init 200 python:
@@ -177,7 +358,7 @@ label julia_scene_vaginal_revisit_2nd_time_impreg_override:
 
     menu:
         "I want to get you pregnant [julia.say_name]!":
-            $ julia_impreg = True
+            $ store.julia_impreg = True
             julia.c "Oh yeah?"
             julia.c "Say it like you mean it."
             n.c "I really do want to get you pregnant, [julia.say_name]!"
@@ -236,7 +417,7 @@ label julia_scene_vaginal_revisit_2nd_time_impreg_override:
     julia.c "You're getting good at this [n.say_name]."
 
 
-    if julia_impreg:
+    if store.julia_impreg:
         julia.c "(Too good...)"
 
     jump julia_scene_vaginal_revisit_end
@@ -347,7 +528,7 @@ label janet_scene_vaginal_revisit_2nd_time_impreg_override:
 
     menu:
         "I'm ready, Aunt [janet.say_name]!":
-            $ janet_impreg = True
+            $ store.janet_impreg = True
             janet.c "I wouldn't expect anything less from my favorite nephew!"
             janet.c "I'm so happy you feel the same way!"
             janet.c "I have complete faith in you, [n.say_name]!"
@@ -362,7 +543,7 @@ label janet_scene_vaginal_revisit_2nd_time_impreg_override:
             janet.c "(It's a wonderful feeling)"
 
         "I just want to come inside you.":
-            $ janet_impreg = False
+            $ store.janet_impreg = False
             janet.c "Typical boy attitude right there!"
             janet.c "Your other head does all the thinking for you!"
             n.c "..."
@@ -390,7 +571,7 @@ label janet_scene_vaginal_revisit_2nd_time_impreg_override:
     janet.c "..."
     janet.c "You look a bit tired after that [n.say_name]."
 
-    if janet_impreg:
+    if store.janet_impreg:
         janet.c "That was the creampie of the century you did right there!"
         janet.c "With the amount of cum you just let out, I'd say that was bound to get any girl pregnant, haha!"
         janet.c "..."
@@ -582,7 +763,7 @@ label gloryhole_scene_stall_sex_impreg_override(dream = False):
             gloryhole_girl.c "..."
             gloryhole_girl.c "([n.say_name] is unique, that's for sure)"
         "Impregnate [gloryhole_girl.say_name]":
-            $ kacey_impreg = True
+            $ store.kacey_impreg = True
             n.c "[gloryhole_girl.say_name[0]]-[gloryhole_girl.say_name]!"
             n.c "Hnng!"
 
@@ -683,7 +864,7 @@ label gloryhole_scene_stall_revisit_2nd_time_impreg_override:
             gloryhole_girl.c "..."
             gloryhole_girl.c "(I don't even think my pussy can hold all of it!)"
         "Impregnate [gloryhole_girl.say_name]":
-            $ kacey_impreg = True
+            $ store.kacey_impreg = True
             n.c "[gloryhole_girl.say_name[0]]-[gloryhole_girl.say_name]!"
             n.c "Hnng!"
 
@@ -714,7 +895,7 @@ label gloryhole_scene_stall_revisit_2nd_time_impreg_override:
     n.c "{i}Whew.{/i}.."
     gloryhole_girl.c "..."
 
-    if kacey_impreg:
+    if store.kacey_impreg:
         gloryhole_girl.c "(No need to worry about re-populating if someone like [n.say_name] is around...)"
 
     call gloryhole_scene_stall_revisit_end
@@ -794,7 +975,7 @@ label vicky_scene_vaginal_revisit_2nd_time_impreg_override:
             vicky.c "(There's likely a few lingering stain spots)"
 
         "Impregnate [vicky.say_name]":
-            $ vicky_impreg = True
+            $ store.vicky_impreg = True
 
             if persistent.enable_sex_sounds:
                 $ renpy.play ( "audio/sounds/DSKB1_Ejaculation_04.ogg" )
@@ -1073,7 +1254,7 @@ label kira_simone_threesome_extended_content_1st_time_impreg_override:
 
         "Impregnate [k.say_name]":
             call static_still_ctc("bg kiraahego_internal_nocum")
-            $ kira_impreg = True
+            $ store.kira_impreg = True
             k.c "Let's bring it on home bro!"
             n.c "Haa, ahn..."
             k.c "(There's little doubt in my mind where these creampies will lead to...)"
@@ -1140,7 +1321,7 @@ label kira_simone_threesome_extended_content_1st_time_impreg_override:
 
         "Impregnate Mom":
             call static_still_ctc("bg simoneahego_internal_nocum")
-            $ simone_impreg = True
+            $ store.simone_impreg = True
             si.c "Oh yes, ah yes!"
             si.c "Keep going like this sweetie!"
             n.c "Haa, ahn..."
@@ -1153,7 +1334,6 @@ label kira_simone_threesome_extended_content_1st_time_impreg_override:
             n.c "Mom, I'm coming!"
             n.c "Hooo!"
 
-
             if persistent.enable_sex_sounds:
                 $ renpy.play ( "audio/sounds/DSKB1_Ejaculation_04.ogg" )
 
@@ -1165,7 +1345,6 @@ label kira_simone_threesome_extended_content_1st_time_impreg_override:
             si.c "I don't see any cum dripping out."
             si.c "You must have shot deep in my pussy!"
             si.c "..."
-
 
             call static_still_ctc("bg simoneahego_internal_cum_impreg")
             si.c "(There's a very high chance [n.say_name] may have just... impregnated me)"
@@ -1200,7 +1379,7 @@ label kira_simone_threesome_extended_content_cum_impreg_override:
             k.c "Finishing strong bro!"
         "Impregnate [k.say_name]":
             call static_still_ctc("bg kiraahego_internal_nocum")
-            $ kira_impreg = True
+            $ store.kira_impreg = True
 
             k.c "..."
             n.c "Hrrm!"
@@ -1226,7 +1405,7 @@ label kira_simone_threesome_extended_content_cum_impreg_override:
             si.c "Magnificent sweetie!"
         "Impregnate Mom":
             call static_still_ctc("bg simoneahego_internal_nocum")
-            $ simone_impreg = True
+            $ store.simone_impreg = True
 
             si.c "..."
             n.c "Aah!"
@@ -1316,7 +1495,7 @@ label finale_scene_choices_impreg_override(dream = False):
         vicky.c "Indeed."
         vicky.c "[n.say_name] requires our undivided attention right now."
 
-        if edna_impreg:
+        if store.edna_impreg:
             k.c "You know, if you had arrived sooner, you could have seen [n.say_name] impregnating Grandma!"
             vicky.c "{w=1.0}...What?"
             vicky.c "You... {w=1.0}impregnated your own grandmother, [n.say_name]?"
@@ -1465,7 +1644,7 @@ label finale_scene_choices_impreg_override(dream = False):
                     edna.c "We all love his cock though, so it goes both ways!"
 
                 "Impregnate Grandma":
-                    $ edna_impreg = True
+                    $ store.edna_impreg = True
                     n.c "Aah, yeah Grandma..."
                     edna.c "You have a serious expression on your face, [n.say_name]."
                     edna.c "We're giving everybody a good show, so keep it up!"
@@ -1745,12 +1924,10 @@ label finale_scene_choices_impreg_override(dream = False):
             k.c "It's like clockwork!"
             edna.c "It's like a more sensual version of a goodnight kiss!"
 
-
             if finale_julia_sam:
                 sa.c "[n.say_name] also has Mom give him titfucks all the time!"
                 sa.c "She's always taking her boobs out!"
                 janet.c "My sister has a lot to offer with those gigantic melons of hers!"
-
 
             si.c "Aah..."
             si.c "[n.say_name] knew next to nothing about sex before the summer started!"
@@ -1763,8 +1940,7 @@ label finale_scene_choices_impreg_override(dream = False):
             n.c "Ahn, Mooom!"
             edna.c "If [n.say_name] fucks you all the time like this [si.say_name], you may end up with a new family member in the future!"
 
-
-            if edna_impreg:
+            if store.edna_impreg:
                 edna.c "Actually, make that two new family members!"
                 edna.c "Your child and my child will get along swimmingly!"
         "[sa.say_name]" if finale_julia_sam and not finale_chose_sam:
@@ -1778,7 +1954,6 @@ label finale_scene_choices_impreg_override(dream = False):
             with Dissolve(0.5)
             call process_character(k, appearance = "pose armcross face flirt blush false")
             k.c "Come on over [sa.say_name]!"
-
 
             call static_still_ctc("bg party_sam")
             n.c "Haaah!"
@@ -1940,7 +2115,7 @@ label finale_scene_revisit_fuck_choices_impreg_override:
                     else:
                         edna.c "Will you be inviting any additional girls to these parties?"
                 "Impregnate Grandma":
-                    $ edna_impreg = True
+                    $ store.edna_impreg = True
                     n.c "Aah, yeah, Grandma..."
                     edna.c "You have a serious expression on your face, [n.say_name]."
                     edna.c "We're giving everybody a good show, so keep it up!"
@@ -2874,9 +3049,10 @@ label epilogue_override:
         k.c "Grandma, you're looking so stoic!"
         edna.c "I tend to look better in photos where my smile is subdued."
         si.c "Alright, [sa.say_name] and [julia.say_name]..."
-        si.c "It would be nice to have our daughters in front of us [janet.say_name], what do you think?"
+        si.c "It would be nice to have our daughters in front of us, [janet.say_name], what do you think?"
         janet.c "I like that!"
-        edna.c "Why don't [sa.say_name] and [julia.say_name] get close to [n.say_name], maybe they can put their arms around him."
+        edna.c "Why don't [sa.say_name] and [julia.say_name] get close to [n.say_name]?"
+        edna.c "Maybe they can put their arms around him."
         edna.c "That would be very cute."
         si.c "That does sound adorable!"
 
@@ -2890,9 +3066,9 @@ label epilogue_override:
         janet.c "This is a rare feat to get [julia.say_name] in front of a camera."
         janet.c "It may be our only chance!"
         julia.c "Hey, I don't avoid cameras that much."
-        julia.c "Okay I do, but..."
+        julia.c "Okay, I do, but..."
         edna.c "I'm not fond of cameras either [julia.say_name], but this is a special occasion!"
-        si.c "A very special occssion!"
+        si.c "A very special occasion!"
         si.c "I love photos of the whole family!"
         janet.c "Make sure to smile!"
 
@@ -2916,7 +3092,7 @@ label epilogue_override:
         si.c "You spend so much time with [n.say_name] and us, you're practically family too!"
         k.c "We're one big, happy, fucking family!"
         k.c "Emphasis on the fucking!"
-        sa.c "Press the camera button [gloryhole_girl.say_name]!"
+        sa.c "Press the camera button, [gloryhole_girl.say_name]!"
         gloryhole_girl.c "..."
         gloryhole_girl.c "I see it blinking!"
 
@@ -3169,7 +3345,7 @@ label epilogue_override:
 
     return
 
-label epilogue_pregnancy_leftovers:
+label epilogue_pregnancy_leftovers_phase_1:
     $ epilogue_pregnancy_completed = True
     hide kira_layer
     hide simone_layer
@@ -3187,13 +3363,40 @@ label epilogue_pregnancy_leftovers:
 
     call kira_epilogue_main
 
-    call fade_to_black(1)
+    $ epilogue_pregnancy_leftovers_phase_1_complete = True
+
+    call fade_to_black(2)
     n.c "{i}Yep, it's just another average day.{/i}"
     n.c "{i}Although, by most standards, my days are far from average.{/i}"
     n.c "{i}I'm super lucky to have all these great girls in my life.{/i}"
 
+    if renpy.exists('mods/pregnancy_epilogue_remake_mod/scripts/pregnancy_epilogue_remake_menu.rpy'):
+        if store.pregnancy_epilogue_remake_mod_detected:
+            call pregnancy_epilogue_remake_mod_choice_menu_leftovers
+    else:
+        call epilogue_pregnancy_leftovers_phase_2
+
+label epilogue_pregnancy_leftovers_phase_2:
     $ no_bust_art = True
     $ clear_characters()
+
+    call fade_to_black(2)
+
+    if store.epilogue_pregnancy_leftovers_phase_1_complete:
+        n.c "{i}Yep, it's just another average day.{/i}"
+        n.c "{i}Although, by most standards, my days are far from average.{/i}"
+
+    pause 2.0
+    n.c "{i}I'm glad that things have remained the same as they were back in the summer.{/i}"
+    n.c "{i}Each day I have my fill of multiple fucks.{/i}"
+    n.c "{i}It's become second nature for me to take my dick out whenever I'm horny.{/i}"
+    n.c "{i}If Aunt [janet.say_name], Grandma, or anyone comes to visit, we fuck right in the doorway as a greeting.{/i}"
+    n.c "{i}And family gatherings during the holidays always turn into an orgy.{/i}"
+    n.c "{i}It gets real messy!{/i}"
+
+    pause 1.0
+    n.c "{i}I'm super lucky to have all these great girls in my life.{/i}"
+
     show bg photo_epilogue_background
     show kira_layer:
         Null()
@@ -3214,6 +3417,7 @@ label epilogue_pregnancy_leftovers:
     show vicky_layer:
         Null()
     with Dissolve(0.5)
+
     n.c "{i}Now that I think about it, all of us have had major changes since this past summer!{/i}"
     n.c "{i}Let me see if I can remember everything...{/i}"
 
@@ -3229,7 +3433,7 @@ label epilogue_pregnancy_leftovers:
     pause
     window show
     $ quick_menu = True
-    n.c "{i}[k.say_name] did take up [vicky.say_name]'s offer to star in porn videos with me, but she still has a part time job at the fitness center.{/i}"
+    n.c "{i}[k.say_name] had taken [vicky.say_name]'s offer to star in porn videos with me, but she still has a part-time job at the fitness center.{/i}"
     n.c "{i}She says she wants to bring me in one day to see all her co-workers.{/i}"
     n.c "{i}Apparently, they're all eager to see me for some reason...{/i}"
 
@@ -3360,6 +3564,9 @@ label epilogue_pregnancy_leftovers:
     n.c "{i}And we won't be slowing down anytime soon!{/i}"
     n.c "{i}Oh yeah, and I almost forgot...{/i}"
     n.c "{i}This coming summer, the size of our family is going to be expanding dramatically!{/i}"
+
+    # reverting it back to false if you replay the cru epilogue afterwards
+    $ epilogue_pregnancy_leftovers_phase_1_complete = False
 
     jump epilogue_end
 

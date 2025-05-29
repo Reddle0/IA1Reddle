@@ -1,4 +1,4 @@
-init offset = 200
+init offset = 101
 
 default persistent.see_incomplete_leftovers = False
 default persistent.bonus_leftovers_enabled = False
@@ -58,26 +58,6 @@ init 100 python:
         return choice_list
 
     nate_room_empty_choices = leftovers_nate_room_choices
-
-transform character_dialog_icon:
-    size (32,32)
-    yalign 1.0
-    yoffset 3
-
-label debug_boldness_check:
-    menu:
-        "Set to 1":
-            $ stats.boldness_level = 1
-            $ stats.boldness_xp = 0
-        "Add 2 points":
-            call debug_boldness_2
-        "Add 999 points":
-            call debug_boldness_999
-
-    if started_main_game:
-        $ advance_time_return_location.start()
-
-    return
 
 label leftovers_mod_options:
     menu:

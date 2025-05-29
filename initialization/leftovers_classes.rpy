@@ -15,7 +15,7 @@ init 99 python:
         return files
 
 # Resetting Appearances when backing out of the Gallery
-init 2 python:
+init 100 python:
     def gallery_bust_art_back():
         clear_characters()
         reset_all_characters()
@@ -88,7 +88,7 @@ init 100 python:
     Gloryhole_Girl.glasses_image_filename = kacey_glasses_image_filename
 
 ## New Bust Art Icons ##
-init 2 python:
+init 99 python:
     def icon_image(self, suffix = ""):
         string = "mods/leftovers_mod/images/interface/" + "Kacey" + "_Face_Icon" + suffix
         if "gloryhole_scene_stall" not in store.scenes_completed:

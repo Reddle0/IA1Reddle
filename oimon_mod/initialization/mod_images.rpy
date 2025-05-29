@@ -1,4 +1,4 @@
-init 2 python:
+init 100 python:
     mod_image_folder_prefixes.append("mods/leftovers_mod/images/oimon_mod")
 
 init 100 python:

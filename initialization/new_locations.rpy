@@ -3,7 +3,7 @@ default kacey_apartment = Kacey_Apartment()
 default had_kacey_apartment_intro = False
 default kacey_apartment_visited = False
 
-init 2 python:
+init 100 python:
     class Kacey_Apartment(Outside_Location):
         def name(self):
             return "[gloryhole_girl.say_name]'s Apartment"
