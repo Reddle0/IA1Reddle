@@ -158,7 +158,7 @@ label text_test:
         alpha 0.0
         linear 4.0 alpha 1.0  # 4-second smooth fade to white
 
-    $ renpy.pause(6.0, hard=True) # hard pause
+    $ renpy.pause(7.0, hard=True) # hard pause
 
     scene black with fade
 
