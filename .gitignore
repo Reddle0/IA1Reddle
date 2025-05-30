@@ -1,0 +1,11 @@
+# Ignore Ren'Py compiled and user data files
+*.rpyc
+*.rpa
+*.log
+*.save
+*.autosave
+*.bak
+*.tmp
+saves/
+persistent
+.DS_Store
