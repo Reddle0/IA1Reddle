@@ -152,12 +152,13 @@ label text_test:
 
     show screen item_showcase
 
+    # Testing Long FTBs
     $ clear_characters()
     show fade_white_overlay at truecenter zorder 100:
         alpha 0.0
         linear 4.0 alpha 1.0  # 4-second smooth fade to white
 
-    $ renpy.pause(5.0, hard=True) # hard pause
+    $ renpy.pause(6.0, hard=True) # hard pause
 
     scene black with fade
 
