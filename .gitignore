@@ -1,0 +1,94 @@
+# --------------------------------------------------------------------
+# DO NOT TRACK MEDIA FOLDERS
+# --------------------------------------------------------------------
+/images/
+/audio/
+/music/
+/video/
+/movies/
+/gui/
+
+/game/images/
+/game/audio/
+/game/music/
+/game/video/
+/game/movies/
+/game/gui/
+
+/mods/images/
+/mods/audio/
+/mods/music/
+/mods/video/
+/mods/movies/
+/game/mods/images/
+/game/mods/audio/
+/game/mods/music/
+/game/mods/video/
+/game/mods/movies/
+
+# --------------------------------------------------------------------
+# Ren'Py compiled/generated files
+# --------------------------------------------------------------------
+*.rpyc
+*.rpyb
+*.rpymc
+*.rpa
+*.rpi
+
+cache/
+tmp/
+saves/
+game/cache/
+game/tmp/
+game/saves/
+
+# --------------------------------------------------------------------
+# Ren'Py logs/errors
+# --------------------------------------------------------------------
+log.txt
+errors.txt
+traceback.txt
+lint.txt
+game/log.txt
+game/errors.txt
+game/traceback.txt
+game/lint.txt
+
+# --------------------------------------------------------------------
+# Build/distribution output
+# --------------------------------------------------------------------
+build/
+dist/
+dists/
+*.zip
+*.tar.bz2
+*.tar.gz
+*.rar
+*.7z
+*.exe
+*.app
+*.apk
+
+# --------------------------------------------------------------------
+# Python/cache
+# --------------------------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+
+# --------------------------------------------------------------------
+# Editor/OS junk
+# --------------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --------------------------------------------------------------------
+# Backups/temp files
+# --------------------------------------------------------------------
+*.bak
+*.tmp
+*.swp
+*~

@@ -1,0 +1,538 @@
+# Minigame Tweaks #
+
+# I'm using this RPY as a way to house all the "tweaks" I wanted to make to minigames
+# Currently only houses one major tweak for now, will be exapnded upon at a later date 
+
+# 12/03/25 Added multi-racer support system
+# 18/03/25 Fixed progression bug by splitting normal race from multi-race mode
+# 22/03/25 Rewrote unlock system to be per-character instead of global
+
+####################
+# Override Cleanup #
+####################
+# if another file already redirected labels that are changed in this file,
+# point it back to the normal label before we override here
+#init 300 python:
+#    if "minigame_racing" in config.label_overrides:
+#        config.label_overrides["minigame_racing"] = "minigame_racing"
+
+# better version, less conflict with very hard mode
+init 599 python:
+    def leftovers_kira_available_minigames(self):
+        minigame_call_labels = []
+        
+        minigame_call_labels.append("minigame_racing_leftovers")
+        
+        return minigame_call_labels
+
+    Kira.available_minigames = leftovers_kira_available_minigames
+
+init 599 python:
+    def leftovers_janet_available_minigames(self):
+        minigame_call_labels = []
+
+        if "janet_scene_minigame_intro" in store.scenes_completed:
+            minigame_call_labels.append("minigame_racing_leftovers")
+
+        return minigame_call_labels
+
+    Janet.available_minigames = leftovers_janet_available_minigames
+
+########################
+#  Multi-Racer System  #
+########################
+# I had the idea of expanding the racing minigame to be able to support more than just Kira/Janet as the opponents
+# This ballooned into a massive project of its own, and the result is everything seen below.
+# A menu now pops up before the race starts with a list of all the girls (including Kacey and Vicky)
+# Unlock requirements to see the girls are subject to change. As of me writing this, they're just using intro scenes.
+# It's also possible to unselect Kira/Janet and have a race primarily made up of what was previously "impossible" racers (Sam, Simone, etc.)
+# You can even race with just Sam, Simone, etc. if you really wanted to.
+# I've done my best to maintain the structure of the original racing minigame the best I can, with obvious tweaks here and there to account for this new system
+
+# Currently, I've also opted to make this system just for fun. No betting, or payouts/rewards.
+# This is also subject to change at any time, it's just the easiest solution right now.
+# But basically:
+# Race Normally = base game race, progression, rewards
+# Bring Others = bonus modded mode, no progression, no rewards
+
+# I may eventually expand further by including a time trial system
+# I also want to write up an intro of Kira explaining the system in-universe, like her racing minigame intro
+# It's also currently tied to Kira/Janet. I *may* change this to a different thing (i.e. the beach) but no promises.
+# Right now, I like the system as is, but the system has seen many, MANY revisions amd will/may do so again
+# TODO: consider moving this to its own file if it gets any bigger
+
+# Defaults #
+default minigame_racing_selected_racers = []
+default minigame_racing_racers = []
+default minigame_racing_extra_racer_x = {}
+default minigame_racing_extra_racer_step_amount = {}
+default minigame_racing_winner = None
+
+# Helpers #
+# most of the code below exists so the labels can stay close to the base minigame_racing.rpy code
+# the idea is to keep the label layout similar to the original minigame code, while just slotting in the multi-racer stuff
+# since the minigame_racing is obviously hard-coded to just Kira/Janet and Nate, extra code is needed first to extend it to more than just them
+# the labels still have to be overridden fully, because there's no clean way to insert what's needed into them
+# these helper methods get added onto the character classes so the race code below can use them
+
+# keep this fairly late so these helpers are already in place before the minigame uses them
+init 600 python:
+    # check whether a girl can show up in racer select
+    # by default, set to False
+    def leftovers_minigame_racing_selectable(self):
+        return False
+
+    # name shown in the racer select button
+    def leftovers_minigame_racing_selection_name(self):
+        return self.say_name
+
+    # add these onto IA_Actor so every racer gets them by default, including modded characters
+    IA_Actor.minigame_racing_selectable = leftovers_minigame_racing_selectable
+    IA_Actor.minigame_racing_selection_name = leftovers_minigame_racing_selection_name
+
+    # kira/sam/simone are enabled by default
+    # the others require intro scenes
+    # SUBJECT TO CHANGE!
+    def kira_minigame_racing_selectable(self):
+        return True
+
+    def simone_minigame_racing_selectable(self):
+        return True
+
+    def sam_minigame_racing_selectable(self):
+        return True
+
+    def julia_minigame_racing_selectable(self):
+        return store.had_julia_arrived_scene
+
+    def janet_minigame_racing_selectable(self):
+        return store.had_janet_intro_scene
+
+    def edna_minigame_racing_selectable(self):
+        return store.had_edna_intro_scene
+
+    def kacey_minigame_racing_selectable(self):
+        return "gloryhole_handjob_scene" in store.scenes_completed
+
+    def vicky_minigame_racing_selectable(self):
+        return store.had_vicky_intro_scene
+
+    Kira.minigame_racing_selectable = kira_minigame_racing_selectable
+    Simone.minigame_racing_selectable = simone_minigame_racing_selectable
+    Sam.minigame_racing_selectable = sam_minigame_racing_selectable
+    Julia.minigame_racing_selectable = julia_minigame_racing_selectable
+    Janet.minigame_racing_selectable = janet_minigame_racing_selectable
+    Edna.minigame_racing_selectable = edna_minigame_racing_selectable
+    Gloryhole_Girl.minigame_racing_selectable = kacey_minigame_racing_selectable
+    Vicky.minigame_racing_selectable = vicky_minigame_racing_selectable
+
+    # most girls don't have special race face icons
+    # Kira and Janet already handle their own race icons, so these methods cover everyone else
+    # if a girl is missing custom race face icons (everyone not named Kira/Janet), just use her normal icon instead
+    def leftovers_racing_icon_losing(self):
+        return self.icon_image("")
+
+    def leftovers_racing_icon_losing_bad(self):
+        return self.icon_image("")
+
+    def leftovers_racing_icon_winning(self):
+        return self.icon_image("")
+
+    IA_Actor.racing_icon_losing = leftovers_racing_icon_losing
+    IA_Actor.racing_icon_losing_bad = leftovers_racing_icon_losing_bad
+    IA_Actor.racing_icon_winning = leftovers_racing_icon_winning
+
+    # while edna already has existing icon files (for her own minigame), they use a slightly different naming pattern
+    # to account for this, these return the exact file paths her race icons need for her to not crash the game
+    def leftovers_edna_racing_icon_losing_bad(self):
+        return "interface/Edna_Shock_Icon.png"
+
+    def leftovers_edna_racing_icon_winning(self):
+        return "interface/Edna_Happy_Icon.png"
+
+    Edna.racing_icon_losing_bad = leftovers_edna_racing_icon_losing_bad
+    Edna.racing_icon_winning = leftovers_edna_racing_icon_winning
+
+init 600 python:
+    # build the list of characters the menu is allowed to show
+    def leftovers_minigame_racing_selectable_girls():
+        selectable_girls = []
+
+        for girl in npc_list():
+            if girl.minigame_racing_selectable():
+                selectable_girls.append(girl)
+
+        return selectable_girls
+
+    # handle picking and unpicking racers in the menu
+    def leftovers_minigame_racing_toggle_racer(selected_racers, racer):
+        new_selected_racers = selected_racers[:]
+
+        if racer in new_selected_racers:
+            new_selected_racers.remove(racer)
+            return new_selected_racers
+
+        # max 3 without adjusting the layout further
+        # if len(new_selected_racers) >= 4:  # tried allowing 4 racers but the track got too crowded
+        if len(new_selected_racers) >= 3:
+            return new_selected_racers
+
+        new_selected_racers.append(racer)
+        return new_selected_racers
+
+    def leftovers_minigame_racing_selected_names(selected_racers):
+        name_list = []
+
+        for racer in selected_racers:
+            name_list.append(racer.say_name)
+
+        if len(name_list) == 0:
+            return "None (Pick at least 1)"
+
+        return ", ".join(name_list)
+
+init 600 python:
+    # grab a racer's x position from wherever it's stored
+    def leftovers_minigame_racing_racer_x(racer):
+        if racer == n:
+            return store.minigame_racing_player_x
+        elif racer == k:
+            return store.minigame_racing_kira_x
+        elif racer == janet:
+            return store.minigame_racing_janet_x
+        else:
+            return store.minigame_racing_extra_racer_x.get(racer, 0)
+
+    def leftovers_minigame_racing_set_racer_x(racer, x_pos):
+        if racer == n:
+            store.minigame_racing_player_x = x_pos
+        elif racer == k:
+            store.minigame_racing_kira_x = x_pos
+        elif racer == janet:
+            store.minigame_racing_janet_x = x_pos
+        else:
+            store.minigame_racing_extra_racer_x[racer] = x_pos
+
+    def leftovers_minigame_racing_racer_step(racer):
+        if racer == n:
+            return store.minigame_racing_player_step_amount
+        elif racer == k:
+            return store.minigame_racing_kira_step_amount
+        elif racer == janet:
+            return store.minigame_racing_janet_step_amount
+        else:
+            return store.minigame_racing_extra_racer_step_amount.get(racer, 0)
+
+# Racer Selection Screen #
+screen leftovers_minigame_racing_select_racers(selected_racers):
+    modal True
+
+    add Solid("#000") at Transform(alpha=0.6)
+
+    frame:
+        xalign 0.5
+        yalign 0.5
+        xsize 1200
+        ysize 800
+        background Frame("images/interface/ShoppingMenuBox.png", 40, 40)
+
+        vbox:
+            xalign 0.5
+            yalign 0.5
+            spacing 20
+
+            text "Select Your Racers (Pick 1-3)" size 48 xalign 0.5 color "#fff"
+
+            text "Selected: [leftovers_minigame_racing_selected_names(selected_racers)]" size 28 xalign 0.5 color "#ccc"
+
+            null height 10
+
+            $ selectable_girls = leftovers_minigame_racing_selectable_girls()
+            $ cols = 3
+            $ rows = (len(selectable_girls) + cols - 1) // cols
+
+            grid cols rows spacing 20 xalign 0.5:
+                for girl in selectable_girls:
+                    $ is_selected = girl in selected_racers
+
+                    vbox:
+                        spacing 8
+                        xalign 0.5
+
+                        fixed:
+                            xsize 150
+                            ysize 150
+
+                            add im.Scale(girl.icon_image(""), 150, 150) xalign 0.5 yalign 0.5
+
+                            if is_selected:
+                                text "✓" size 64 xalign 0.9 yalign 0.1 color "#0f0" outlines [(3, "#000", 0, 0)]
+
+                        textbutton girl.minigame_racing_selection_name():
+                            xalign 0.5
+                            text_size 24
+                            action SetScreenVariable("selected_racers", leftovers_minigame_racing_toggle_racer(selected_racers, girl))
+
+            null height 20
+
+            textbutton "Start Race":
+                xalign 0.5
+                text_size 36
+                action Return(selected_racers)
+                sensitive len(selected_racers) >= 1
+
+label minigame_racing_leftovers:
+    $ minigame_racing_started = True
+    
+    python:
+        minigame_racing_player_x = 0
+        minigame_racing_kira_x = 0
+        minigame_racing_janet_x = 0
+        minigame_racing_extra_racer_x = {}
+        minigame_racing_extra_racer_step_amount = {}
+        minigame_racing_winner = None
+        
+        minigame_racing_player_step_amount = 0
+        minigame_racing_kira_step_amount = 0
+        minigame_racing_janet_step_amount = 0
+        
+        minigame_racing_forced_nate_face = ""
+        minigame_racing_forced_kira_face = ""
+        minigame_racing_forced_janet_face = ""
+        minigame_racing_forced_sam_face = ""
+        minigame_racing_forced_simone_face = ""
+        minigame_racing_forced_julia_face = ""
+        minigame_racing_forced_edna_face = ""
+        minigame_racing_forced_gloryhole_girl_face = ""
+        minigame_racing_forced_vicky_face = ""
+
+    $ minigame_racing_selected_racers = []
+
+    call screen leftovers_minigame_racing_select_racers(minigame_racing_selected_racers)
+    
+    $ minigame_racing_selected_racers = _return
+    $ minigame_racing_racers = minigame_racing_selected_racers[:]
+
+    # if partner isn't in the race, pick someone who is
+    if minigame_racing_partner not in minigame_racing_racers:
+        if len(minigame_racing_racers) > 0:
+            $ minigame_racing_partner = minigame_racing_racers[0]
+
+    python:
+        for racer in minigame_racing_racers:
+            if minigame_racing_difficulty == "easy":
+                step_amt = random.randint(15, 25)
+            elif minigame_racing_difficulty == "medium":
+                step_amt = random.randint(25, 35)
+            else:
+                step_amt = random.randint(35, 45)
+            
+            if racer == k:
+                minigame_racing_kira_step_amount = step_amt
+            elif racer == janet:
+                minigame_racing_janet_step_amount = step_amt
+            else:
+                minigame_racing_extra_racer_step_amount[racer] = step_amt
+
+    $ minigame_racing_partner_x = 0
+    $ minigame_racing_partner_step_amount = 0
+
+    python:
+        minigame_racing_finish_line = 1000
+        minigame_racing_time_limit = 60
+        minigame_racing_bet_amount = 0
+        
+        if minigame_racing_difficulty == "easy":
+            minigame_racing_player_step_amount = random.randint(30, 40)
+        elif minigame_racing_difficulty == "medium":
+            minigame_racing_player_step_amount = random.randint(35, 45)
+        else:
+            minigame_racing_player_step_amount = random.randint(40, 50)
+
+    $ minigame_racing_win_lose_big_threshold = 0.15
+
+    $ disable_saving()
+
+    if config.developer:
+        $ minigame_racing_player_step_amount = 999
+
+    show screen minigame_racing_info
+    show screen minigame_countdown(minigame_racing_time_limit, "minigame_racing_return_label")
+
+    python:
+        while True:
+            input_result = renpy.call_screen("minigame_racing_input")
+            
+            if input_result == "good":
+                minigame_racing_player_x += minigame_racing_player_step_amount
+                
+                for racer in minigame_racing_racers:
+                    racer_x = leftovers_minigame_racing_racer_x(racer)
+                    racer_step = leftovers_minigame_racing_racer_step(racer)
+                    leftovers_minigame_racing_set_racer_x(racer, racer_x + racer_step)
+            
+            elif input_result == "bad":
+                for racer in minigame_racing_racers:
+                    racer_x = leftovers_minigame_racing_racer_x(racer)
+                    racer_step = leftovers_minigame_racing_racer_step(racer)
+                    leftovers_minigame_racing_set_racer_x(racer, racer_x + racer_step)
+            
+            if minigame_racing_player_x >= minigame_racing_finish_line:
+                renpy.jump("minigame_racing_return_label")
+            
+            for racer in minigame_racing_racers:
+                if leftovers_minigame_racing_racer_x(racer) >= minigame_racing_finish_line:
+                    minigame_racing_winner = racer
+                    renpy.jump("minigame_racing_return_label")
+
+label minigame_racing_return_label:
+    $ minigame_racing_started = False
+
+    hide screen minigame_racing_info
+    hide screen minigame_racing_input
+    call hide_minigame_countdown
+
+    $ won = minigame_racing_player_x >= minigame_racing_finish_line
+
+    if won:
+        $ race_result_racer = minigame_racing_partner
+    else:
+        $ race_result_racer = minigame_racing_winner if minigame_racing_winner else minigame_racing_partner
+
+    python:
+        # fallback if partner isn't actually in the race
+        if race_result_racer not in minigame_racing_racers and len(minigame_racing_racers) > 0:
+            race_result_racer = minigame_racing_racers[0]
+
+            # find whoever made it furthest
+            for racer in minigame_racing_racers:
+                if leftovers_minigame_racing_racer_x(racer) > leftovers_minigame_racing_racer_x(race_result_racer):
+                    race_result_racer = racer
+
+    $ race_result_racer_x = leftovers_minigame_racing_racer_x(race_result_racer)
+
+    # win results
+    if won:
+        if race_result_racer == k:
+            # UNUSED, decided to comment out any rewards gained during the multi-race because it's just for fun
+            #if minigame_racing_difficulty == "easy":
+            #    call add_points(k, 2, minigame = True)
+            #elif minigame_racing_difficulty == "medium":
+            #    call add_points_and_boldness(k, 3, 1, minigame = True)
+            #else:
+            #    call add_points_and_boldness(k, 4, 1, minigame = True)
+
+            if minigame_racing_difficulty == "easy" or minigame_racing_difficulty == "medium":
+                if minigame_racing_player_x > int(race_result_racer_x + (race_result_racer_x * minigame_racing_win_lose_big_threshold)):
+                    $ minigame_racing_forced_kira_face = "_Curious"
+                    call process_character(k, appearance = "", text = "I shouldn't have gone so easy on you!")
+                else:
+                    $ minigame_racing_forced_kira_face = "_Happy"
+                    call process_character(k, appearance = "", text = "That's it, yeah!")
+            else:
+                if minigame_racing_player_x > int(race_result_racer_x + (race_result_racer_x * minigame_racing_win_lose_big_threshold)):
+                    $ minigame_racing_forced_kira_face = "_Happy"
+                    call process_character(k, appearance = "", text = "(Looks like my little bro has more tenacity than I thought)")
+                else:
+                    $ minigame_racing_forced_kira_face = "_Neutral"
+                    call process_character(k, appearance = "", text = "(Well whaddya know...)")
+
+            # UNUSED, decided to comment out anything related to betting during the multi-race because it's just for fun
+            #if minigame_racing_bet_amount > 0:
+            #    show screen hud
+            #    window hide
+            #    pause 0.5
+            #    $ inventory.add_money(minigame_racing_bet_amount * 2, minigame = True)
+            #    pause 1.5
+
+        elif race_result_racer == janet:
+            if minigame_racing_difficulty == "easy":
+                #$ minigame_racing_reward = 4
+                call process_character(janet, appearance = "pose handface face happy blush false", text = "I shouldn't have gone as slow as I did!")
+                call process_character(janet, appearance = "pose handface face happy blush false", text = "You kept up with ease!")
+                #call add_points_and_boldness(janet, 2, 1, minigame = True)
+            elif minigame_racing_difficulty == "medium":
+                #$ minigame_racing_reward = 6
+                call process_character(janet, appearance = "pose handhips face happy blush false", text = "My nephew is quite the swimmer!")
+                #call add_points_and_boldness(janet, 3, 1, minigame = True)
+            else:
+                #$ minigame_racing_reward = 8
+                $ diceroll = random.randint(1,2)
+
+                if diceroll == 1:
+                    call process_character(janet, appearance = "pose handface face happy blush false", text = "I think you're part dolphin!")
+                    call process_character(janet, appearance = "pose handface face happy blush false", text = "That's the only way to explain your speed!")
+                else:
+                    call process_character(janet, appearance = "pose handchest face happy blush false", text = "If I could swim like that when I was your age...")
+                    call process_character(janet, appearance = "pose handchest face happy blush false", text = "I'd have a rack of trophies!")
+
+                #call add_points_and_boldness(janet, 4, 1, minigame = True)
+
+            #show screen hud
+            #window hide
+            #pause 0.5
+            #$ inventory.add_money(minigame_racing_reward, minigame = True)
+            #pause 1.5
+
+        else:
+            #if minigame_racing_difficulty == "easy":
+            #    call add_points(race_result_racer, 2, minigame = True)
+            #elif minigame_racing_difficulty == "medium":
+            #    call add_points_and_boldness(race_result_racer, 3, 1, minigame = True)
+            #else:
+            #    call add_points_and_boldness(race_result_racer, 4, 1, minigame = True)
+
+            # nate won here, so use this racer's loss lines instead
+            $ loser_lines = race_result_racer.minigame_racing_lost_against_nate_lines(minigame_racing_difficulty)
+
+            $ race_result_racer.reset_appearance(position = "right", show_bust = True)
+
+            python:
+                for loser_line in loser_lines:
+                    process_character_replace_utility(race_result_racer, appearance = "", text = loser_line)
+
+    # lose results
+    else:
+        $ race_winner = minigame_racing_winner
+
+        if race_winner is None:
+            $ race_winner = minigame_racing_partner
+
+        $ race_winner_x = leftovers_minigame_racing_racer_x(race_winner)
+        $ race_winner_x = leftovers_minigame_racing_racer_x(race_winner)
+
+        if race_winner == k:
+            if race_winner_x > int(minigame_racing_player_x + (minigame_racing_player_x * minigame_racing_win_lose_big_threshold)):
+                $ minigame_racing_forced_kira_face = "_Curious"
+                call process_character(k, appearance = "", text = "What was that?")
+                call process_character(k, appearance = "", text = "I know you're more capable.")
+            else:
+                $ minigame_racing_forced_kira_face = "_Neutral"
+                call process_character(k, appearance = "", text = "That was close [n.say_name]!")
+                call process_character(k, appearance = "", text = "Just have to push hard during that final stretch!")
+
+        elif race_winner == janet:
+            if minigame_racing_difficulty == "easy":
+                call process_character(janet, appearance = "pose handface face concerned blush false", text = "Did you pass out part of the way?")
+            elif minigame_racing_difficulty == "medium":
+                call process_character(janet, appearance = "pose handhips face neutral blush false", text = "Don't get pulled out by the current!")
+            else:
+                call process_character(janet, appearance = "pose handchest face neutral blush false", text = "Hey, you tried!")
+                call process_character(janet, appearance = "pose handchest face neutral blush false", text = "I get wiped out going this fast too!")
+
+        else:
+            $ winner_lines = race_winner.minigame_racing_won_against_nate_lines(minigame_racing_difficulty)
+
+            $ race_winner.reset_appearance(position = "right", show_bust = True)
+
+            python:
+                for winner_line in winner_lines:
+                    process_character_replace_utility(race_winner, appearance = "", text = winner_line)
+
+    $ renpy.block_rollback()
+    $ enable_rollback()
+    $ quick_menu = True
+
+    $ renpy.scene('screens')
+    call process_end_of_minigame("minigame_racing")
+    return

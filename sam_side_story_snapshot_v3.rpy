@@ -1,0 +1,1092 @@
+# sam side story snapshot system
+#
+# this keeps the sam side story on its own branch inside the save.
+# when you enter, the normal game gets packed away.
+# when you leave, the sam branch gets packed away and the normal game comes back.
+
+default sam_side_story_mode = False
+
+default sam_side_story_branch_created = False
+default sam_side_story_branch_state = None
+default sam_side_story_main_state = None
+
+default sam_side_story_draw_real_nate = False
+
+default sam_side_story_branch_version = 0
+
+init 200 python:
+    sam_side_story_global_vars = [
+        "started_main_game",
+        "started_school",
+        "is_school_time",
+        "is_school_day",
+        "entered_outside",
+        "minigames_done",
+        "scenes_completed",
+        "scenes_completed_for_stats",
+        "dreams_had",
+        "scenes_completed_today",
+        "new_scenes_completed_today",
+        "conversations_completed_today",
+        "new_conversations_completed_today",
+        "priority_conversation_completed_today",
+        "general_replayable_scenes",
+        "replay_scenes_unlocked",
+        "had_julia_pre_arrival_scene",
+        "had_julia_arrived_scene",
+        "had_janet_intro_scene",
+        "had_edna_pre_arrival_scene",
+        "had_edna_intro_scene",
+        "had_vicky_pre_intro_scene",
+        "had_vicky_intro_scene",
+        "finale_scene_completed_with_julia_sam",
+        "current_background"
+    ]
+
+    # add more names here the second the side story needs them.
+    sam_side_story_extra_global_vars = [
+    ]
+
+    # same thing here, but for extra fields living on a character object.
+    sam_side_story_current_branch_version = 2
+
+    sam_side_story_character_extra_fields = {
+        "n": [],
+        "k": [],
+        "si": [],
+        "sa": [],
+        "julia": [],
+        "janet": [],
+        "edna": [],
+        "gloryhole_girl": [],
+        "vicky": []
+    }
+
+    # if you want someone to keep their normal placement or talk logic in the side story,
+    # add their variable name here later.
+    sam_side_story_main_story_scene_whitelist = [
+    ]
+
+    sam_side_story_main_story_conversation_whitelist = [
+    ]
+
+    # only side-story revisit labels should show up while sam's branch is active.
+    # add your modded revisit scene labels here.
+    sam_side_story_revisit_scene_whitelist = [
+    ]
+
+    def sam_side_story_copy_value(value):
+        if isinstance(value, set):
+            return set(value)
+
+        if isinstance(value, list):
+            return value[:]
+
+        if isinstance(value, dict):
+            copied_dict = {}
+
+            for key in value:
+                copied_dict[key] = sam_side_story_copy_value(value[key])
+
+            return copied_dict
+
+        return value
+
+    def sam_side_story_all_global_vars():
+        names = sam_side_story_global_vars[:]
+
+        for name in sam_side_story_extra_global_vars:
+            if name not in names:
+                names.append(name)
+
+        return names
+
+    def sam_side_story_all_characters():
+        chars = []
+
+        for char in family_list():
+            if char not in chars:
+                chars.append(char)
+
+        for char in npc_list():
+            if char not in chars:
+                chars.append(char)
+
+        return chars
+
+    def sam_side_story_location_name(location):
+        if location is None:
+            return ""
+
+        if location == store.school_start_activation:
+            return "school_start_activation"
+
+        return location.internal_name()
+
+    def sam_side_story_find_location(name):
+        if not name:
+            return store.nate_room
+
+        if name == "school_start_activation":
+            return store.school_start_activation
+
+        for location in location_list():
+            if location.internal_name() == name:
+                return location
+
+        return store.nate_room
+
+    def sam_side_story_character_name(char):
+        if char is None:
+            return ""
+
+        return char.variable_name
+
+    def sam_side_story_find_character(name):
+        if not name:
+            return None
+
+        for char in sam_side_story_all_characters():
+            if char.variable_name == name:
+                return char
+
+        return None
+
+    def sam_side_story_allow_main_story_scene_content(char):
+        return char.variable_name in sam_side_story_main_story_scene_whitelist
+
+    def sam_side_story_allow_main_story_conversation_content(char):
+        return char.variable_name in sam_side_story_main_story_conversation_whitelist
+
+    def sam_side_story_filtered_revisitable_scenes(char):
+        if not store.sam_side_story_mode:
+            return char.revistable_scenes
+
+        allowed_scenes = set()
+
+        for scene_name in char.revistable_scenes:
+            if scene_name in sam_side_story_revisit_scene_whitelist:
+                allowed_scenes.add(scene_name)
+
+        return allowed_scenes
+
+    def sam_side_story_clear_pending_content(char):
+        char.scene = ""
+        char.prompted_scene = ""
+        char.play_scene_even_with_prompted_scene = False
+        char.scene_is_low_priority = False
+        char.priority_conversation = ""
+        char.conversation = ""
+        char.conversation_pool = []
+
+        if hasattr(char, "placed_in_a_location"):
+            char.placed_in_a_location = False
+
+        return
+
+    def sam_side_story_clear_all_pending_content():
+        for char in sam_side_story_all_characters():
+            sam_side_story_clear_pending_content(char)
+
+        return
+
+    def sam_side_story_capture_week():
+        data = {}
+        data["day"] = store.week.day
+        data["days_passed"] = store.week.days_passed
+        data["days_of_school_passed"] = store.week.days_of_school_passed
+        data["weeks_passed"] = store.week.weeks_passed
+        data["time"] = store.week.time
+        data["characters_had_scene_with_today"] = set(store.week.characters_had_scene_with_today)
+        return data
+
+    def sam_side_story_apply_week(data):
+        if not data:
+            return
+
+        store.week.day = data["day"]
+        store.week.days_passed = data["days_passed"]
+        store.week.days_of_school_passed = data["days_of_school_passed"]
+        store.week.weeks_passed = data["weeks_passed"]
+        store.week.time = data["time"]
+        store.week.characters_had_scene_with_today = set(data["characters_had_scene_with_today"])
+        return
+
+    def sam_side_story_capture_stats():
+        data = {}
+        data["stats"] = sam_side_story_copy_value(store.stats.stats)
+        data["stat_keys"] = set(store.stats.stat_keys)
+        data["boldness_level"] = store.stats.boldness_level
+        data["boldness_xp"] = store.stats.boldness_xp
+        data["add_boldness_or_relationship_tags"] = sam_side_story_copy_value(store.stats.add_boldness_or_relationship_tags)
+        data["minigame_boldness_xp"] = store.stats.minigame_boldness_xp
+        return data
+
+    def sam_side_story_apply_stats(data):
+        if not data:
+            return
+
+        store.stats.stats = sam_side_story_copy_value(data["stats"])
+        store.stats.stat_keys = set(data["stat_keys"])
+        store.stats.boldness_level = data["boldness_level"]
+        store.stats.boldness_xp = data["boldness_xp"]
+        store.stats.add_boldness_or_relationship_tags = sam_side_story_copy_value(data["add_boldness_or_relationship_tags"])
+        store.stats.minigame_boldness_xp = data["minigame_boldness_xp"]
+        return
+
+    def sam_side_story_capture_inventory():
+        data = {}
+        data["money"] = store.inventory.money
+        data["minigame_money"] = store.inventory.minigame_money
+        data["items"] = sam_side_story_copy_value(store.inventory.items)
+        data["item_history"] = set(store.inventory.item_history)
+        data["buy_history"] = set(store.inventory.buy_history)
+
+        if hasattr(store.inventory, "add_money_tags"):
+            data["add_money_tags"] = sam_side_story_copy_value(store.inventory.add_money_tags)
+        else:
+            data["add_money_tags"] = []
+
+        return data
+
+    def sam_side_story_apply_inventory(data):
+        if not data:
+            return
+
+        store.inventory.money = data["money"]
+        store.inventory.minigame_money = data["minigame_money"]
+        store.inventory.items = sam_side_story_copy_value(data["items"])
+        store.inventory.item_history = set(data["item_history"])
+        store.inventory.buy_history = set(data["buy_history"])
+        store.inventory.add_money_tags = sam_side_story_copy_value(data["add_money_tags"])
+        return
+
+    def sam_side_story_base_character_fields():
+        return [
+            "scene",
+            "scenes_completed_unique",
+            "scenes_completed_in_general",
+            "revistable_scenes",
+            "replayable_scenes",
+            "prompted_scene",
+            "play_scene_even_with_prompted_scene",
+            "scene_is_low_priority",
+            "face",
+            "outfit",
+            "pose",
+            "position",
+            "blush",
+            "points",
+            "relationship_level",
+            "add_points_tags",
+            "minigame_points",
+            "priority_conversation",
+            "conversation",
+            "conversation_pool",
+            "conversations_completed",
+            "recently_completed_conversations",
+            "placed_in_a_location",
+            "has_tried_to_place_at_least_once"
+        ]
+
+    def sam_side_story_character_fields(char):
+        field_names = sam_side_story_base_character_fields()
+
+        if hasattr(char, "mouth"):
+            field_names.append("mouth")
+
+        if hasattr(char, "hat"):
+            field_names.append("hat")
+
+        if hasattr(char, "glasses"):
+            field_names.append("glasses")
+
+        if hasattr(char, "overlays"):
+            field_names.append("overlays")
+
+        if char.variable_name in sam_side_story_character_extra_fields:
+            for field_name in sam_side_story_character_extra_fields[char.variable_name]:
+                if field_name not in field_names:
+                    field_names.append(field_name)
+
+        return field_names
+
+    def sam_side_story_capture_character(char):
+        data = {}
+
+        for field_name in sam_side_story_character_fields(char):
+            if hasattr(char, field_name):
+                data[field_name] = sam_side_story_copy_value(getattr(char, field_name))
+
+        return data
+
+    def sam_side_story_apply_character(char, data):
+        if not data:
+            return
+
+        for field_name in data:
+            setattr(char, field_name, sam_side_story_copy_value(data[field_name]))
+
+        if hasattr(char, "update_full_name"):
+            char.update_full_name()
+
+        return
+
+    def sam_side_story_capture_globals():
+        data = {}
+
+        for name in sam_side_story_all_global_vars():
+            data[name] = sam_side_story_copy_value(getattr(store, name, None))
+
+        data["player_character"] = sam_side_story_character_name(store.player_character)
+        data["last_selected_character"] = sam_side_story_character_name(getattr(store, "last_selected_character", None))
+        data["advance_time_return_location"] = sam_side_story_location_name(store.advance_time_return_location)
+        data["stats_current_location"] = sam_side_story_location_name(store.stats.current_location)
+
+        return data
+
+    def sam_side_story_apply_globals(data):
+        if not data:
+            return
+
+        for name in sam_side_story_all_global_vars():
+            if name in data:
+                setattr(store, name, sam_side_story_copy_value(data[name]))
+
+        store.player_character = sam_side_story_find_character(data.get("player_character", ""))
+        store.last_selected_character = sam_side_story_find_character(data.get("last_selected_character", ""))
+        store.advance_time_return_location = sam_side_story_find_location(data.get("advance_time_return_location", ""))
+        store.stats.current_location = sam_side_story_find_location(data.get("stats_current_location", ""))
+
+        if store.stats.current_location:
+            store.stats.current_zone = store.stats.current_location.zone()
+        else:
+            store.stats.current_zone = store.advance_time_return_location.zone()
+
+        return
+
+    def sam_side_story_capture_state():
+        data = {}
+        data["week"] = sam_side_story_capture_week()
+        data["stats"] = sam_side_story_capture_stats()
+        data["inventory"] = sam_side_story_capture_inventory()
+        data["globals"] = sam_side_story_capture_globals()
+        data["characters"] = {}
+
+        for char in sam_side_story_all_characters():
+            data["characters"][char.variable_name] = sam_side_story_capture_character(char)
+
+        return data
+
+    def sam_side_story_apply_state(data):
+        if not data:
+            return
+
+        sam_side_story_apply_week(data["week"])
+        sam_side_story_apply_stats(data["stats"])
+        sam_side_story_apply_inventory(data["inventory"])
+        sam_side_story_apply_globals(data["globals"])
+
+        for char in sam_side_story_all_characters():
+            if char.variable_name in data["characters"]:
+                sam_side_story_apply_character(char, data["characters"][char.variable_name])
+
+        return
+
+    def sam_side_story_store_main_state():
+        store.sam_side_story_main_state = sam_side_story_capture_state()
+        return
+
+    def sam_side_story_store_branch_state():
+        store.sam_side_story_branch_state = sam_side_story_capture_state()
+        return
+
+    def sam_side_story_make_new_branch_state():
+        store.sam_side_story_branch_state = sam_side_story_capture_state()
+        store.sam_side_story_branch_created = True
+        return
+
+    def sam_side_story_has_branch_state():
+        return store.sam_side_story_branch_created and store.sam_side_story_branch_state is not None
+
+    def sam_side_story_reset_misc_stats():
+        # sam's branch starts with its own misc history.
+        # nate's minigames, dreams, relationship levels, and misc counters should not leak into it.
+        store.stats = IA_Stats()
+        store.week = Week()
+
+        store.dreams_had = 0
+        store.minigames_done = 0
+        store.scenes_completed_for_stats = set()
+
+        for char in sam_side_story_all_characters():
+            char.scenes_completed_unique = 0
+            char.scenes_completed_in_general = 0
+            char.points = 0
+            char.relationship_level = 1
+            char.add_points_tags = []
+            char.minigame_points = 0
+
+        return
+
+init 201 python:
+    # add the entry option to nate's room, but not while you're already inside the side story.
+    sam_side_story_old_nate_room_empty_choices = nate_room_empty_choices
+
+    def sam_side_story_nate_room_empty_choices():
+        old_choice_list = sam_side_story_old_nate_room_empty_choices()
+        choice_list = []
+
+        for option in old_choice_list:
+            if option[1] == "sam_side_story_enter":
+                continue
+            if option[1] == "sam_side_story_debug_status":
+                continue
+            if option[1] == "sam_side_story_exit":
+                continue
+            if option[1] == "back":
+                continue
+
+            choice_list.append(option)
+
+        if store.sam_side_story_mode:
+            choice_list.append(("Leave the side story", "sam_side_story_exit"))
+        else:
+            choice_list.append(("Sam Side Story", "sam_side_story_enter"))
+
+        if config.developer:
+            choice_list.append(("DEBUG: Side Story Status", "sam_side_story_debug_status"))
+
+        choice_list.append(("Back", "back"))
+
+        return choice_list
+
+    nate_room_empty_choices = sam_side_story_nate_room_empty_choices
+
+    # sam is the player here, so she should not also show up as an npc.
+    sam_side_story_old_npc_list = npc_list
+
+    def sam_side_story_npc_list():
+        side_story_chars = []
+
+        for char in sam_side_story_old_npc_list():
+            if store.sam_side_story_mode and char == store.sa:
+                continue
+
+            side_story_chars.append(char)
+
+        return side_story_chars
+
+    npc_list = sam_side_story_npc_list
+
+    # stop nate-route pending scenes and talk content from auto-building inside the side story.
+    sam_side_story_old_actor_place = Actor.place
+
+    def sam_side_story_actor_place(self):
+        if not store.sam_side_story_mode or sam_side_story_allow_main_story_scene_content(self):
+            sam_side_story_old_actor_place(self)
+            return
+
+        self.has_tried_to_place_at_least_once = True
+        self.scene_is_low_priority = False
+        self.play_scene_even_with_prompted_scene = False
+        self.scene = ""
+        self.placed_in_a_location = False
+
+        self.decide_default_location()
+        return
+
+    Actor.place = sam_side_story_actor_place
+
+    sam_side_story_old_actor_set_conversation = Actor.set_conversation
+
+    def sam_side_story_actor_set_conversation(self):
+        if not store.sam_side_story_mode or sam_side_story_allow_main_story_conversation_content(self):
+            sam_side_story_old_actor_set_conversation(self)
+            return
+
+        self.reset_conversation()
+        return
+
+    Actor.set_conversation = sam_side_story_actor_set_conversation
+
+    def sam_side_story_display_character(char):
+        if store.sam_side_story_mode and not store.sam_side_story_draw_real_nate and char == store.n:
+            return store.sa
+
+        return char
+
+    # this catches the common sprite helper paths so sam shows up where nate normally would.
+    sam_side_story_old_process_character = process_character
+
+    def sam_side_story_process_character(char, process_string, show_bust = True):
+        char = sam_side_story_display_character(char)
+        sam_side_story_old_process_character(char, process_string, show_bust = show_bust)
+        return
+
+    process_character = sam_side_story_process_character
+
+    sam_side_story_old_process_character_replace_utility = process_character_replace_utility
+
+    def sam_side_story_process_character_replace_utility(char, appearance = "", text = "", show_bust = True, replace = False):
+        char = sam_side_story_display_character(char)
+        sam_side_story_old_process_character_replace_utility(char, appearance = appearance, text = text, show_bust = show_bust, replace = replace)
+        return
+
+    process_character_replace_utility = sam_side_story_process_character_replace_utility
+
+    sam_side_story_old_display_multiple_characters = display_multiple_characters
+
+    def sam_side_story_display_multiple_characters(array, reset = False):
+        new_array = []
+
+        for item in array:
+            new_array.append((sam_side_story_display_character(item[0]), item[1]))
+
+        sam_side_story_old_display_multiple_characters(new_array, reset = reset)
+        return
+
+    display_multiple_characters = sam_side_story_display_multiple_characters
+
+    # hide normal revisit scenes in the side story.
+    # this keeps nate-route revisit stuff out of sam's branch.
+    sam_side_story_old_actor_choice_list = Actor.choice_list
+
+    def sam_side_story_actor_choice_list(self):
+        if not store.sam_side_story_mode:
+            return sam_side_story_old_actor_choice_list(self)
+
+        old_revisitable_scenes = self.revistable_scenes
+        self.revistable_scenes = sam_side_story_filtered_revisitable_scenes(self)
+        choice_list = sam_side_story_old_actor_choice_list(self)
+        self.revistable_scenes = old_revisitable_scenes
+        return choice_list
+
+    Actor.choice_list = sam_side_story_actor_choice_list
+
+    sam_side_story_old_actor_scene_choice_list = Actor.scene_choice_list
+
+    def sam_side_story_actor_scene_choice_list(self):
+        if not store.sam_side_story_mode:
+            return sam_side_story_old_actor_scene_choice_list(self)
+
+        old_revisitable_scenes = self.revistable_scenes
+        self.revistable_scenes = sam_side_story_filtered_revisitable_scenes(self)
+        choice_list = sam_side_story_old_actor_scene_choice_list(self)
+        self.revistable_scenes = old_revisitable_scenes
+        return choice_list
+
+    Actor.scene_choice_list = sam_side_story_actor_scene_choice_list
+
+    sam_side_story_old_ia_actor_choice_list = IA_Actor.choice_list
+
+    def sam_side_story_ia_actor_choice_list(self):
+        if not store.sam_side_story_mode:
+            return sam_side_story_old_ia_actor_choice_list(self)
+
+        old_revisitable_scenes = self.revistable_scenes
+        self.revistable_scenes = sam_side_story_filtered_revisitable_scenes(self)
+        choice_list = sam_side_story_old_ia_actor_choice_list(self)
+        self.revistable_scenes = old_revisitable_scenes
+        return choice_list
+
+    IA_Actor.choice_list = sam_side_story_ia_actor_choice_list
+
+    sam_side_story_old_ia_actor_scene_choice_list = IA_Actor.scene_choice_list
+
+    def sam_side_story_ia_actor_scene_choice_list(self):
+        if not store.sam_side_story_mode:
+            return sam_side_story_old_ia_actor_scene_choice_list(self)
+
+        old_revisitable_scenes = self.revistable_scenes
+        self.revistable_scenes = sam_side_story_filtered_revisitable_scenes(self)
+        choice_list = sam_side_story_old_ia_actor_scene_choice_list(self)
+        self.revistable_scenes = old_revisitable_scenes
+        return choice_list
+
+    IA_Actor.scene_choice_list = sam_side_story_ia_actor_scene_choice_list
+
+    # sam should stand where the player normally stands.
+    sam_side_story_old_sam_default_position = Sam.default_position
+
+    def sam_side_story_sam_default_position(self):
+        if store.sam_side_story_mode:
+            return "right"
+
+        return sam_side_story_old_sam_default_position(self)
+
+    Sam.default_position = sam_side_story_sam_default_position
+
+    # swap nate's room and sam's room in the home button order during the side story.
+    sam_side_story_old_home_base_locations = Home.base_locations
+
+    def sam_side_story_home_base_locations(self):
+        place_list = sam_side_story_old_home_base_locations(self)
+
+        if not store.sam_side_story_mode:
+            return place_list
+
+        new_places = []
+
+        for place in place_list:
+            if place == store.nate_room:
+                if store.sam_room not in new_places:
+                    new_places.append(store.sam_room)
+            elif place == store.sam_room:
+                if store.nate_room not in new_places:
+                    new_places.append(store.nate_room)
+            else:
+                new_places.append(place)
+
+        return new_places
+
+    Home.base_locations = sam_side_story_home_base_locations
+
+    # home should treat sam's room as the place you return to in the side story.
+    sam_side_story_old_home_return_location = Home.return_location
+
+    def sam_side_story_home_return_location(self):
+        if store.sam_side_story_mode:
+            return store.sam_room
+
+        return sam_side_story_old_home_return_location(self)
+
+    Home.return_location = sam_side_story_home_return_location
+
+    # room names need to make sense from sam's point of view.
+    sam_side_story_old_nate_room_name = Nate_Room.name
+
+    def sam_side_story_nate_room_name(self):
+        if store.sam_side_story_mode:
+            return "Nate's Room"
+
+        return sam_side_story_old_nate_room_name(self)
+
+    Nate_Room.name = sam_side_story_nate_room_name
+
+    sam_side_story_old_sam_room_name = Sam_Room.name
+
+    def sam_side_story_sam_room_name(self):
+        if store.sam_side_story_mode:
+            return "My Room"
+
+        return sam_side_story_old_sam_room_name(self)
+
+    Sam_Room.name = sam_side_story_sam_room_name
+
+    # sam's room becomes the player-room menu in the side story.
+    sam_side_story_old_sam_room_empty_action = Sam_Room.empty_action if hasattr(Sam_Room, "empty_action") else None
+
+    def sam_side_story_sam_room_empty_action(self):
+        if store.sam_side_story_mode:
+            renpy.call("sam_side_story_room_empty")
+            return
+
+        if sam_side_story_old_sam_room_empty_action is not None:
+            sam_side_story_old_sam_room_empty_action(self)
+            return
+
+        Location.empty_action(self)
+        return
+
+    Sam_Room.empty_action = sam_side_story_sam_room_empty_action
+
+    # nate's room stays there, but it becomes an empty room in the side story.
+    sam_side_story_old_nate_room_empty_action = Nate_Room.empty_action
+
+    def sam_side_story_nate_room_empty_action(self):
+        if store.sam_side_story_mode:
+            renpy.call("sam_side_story_nate_room_empty")
+            return
+
+        sam_side_story_old_nate_room_empty_action(self)
+        return
+
+    Nate_Room.empty_action = sam_side_story_nate_room_empty_action
+
+label sam_side_story_enter:
+    $ renpy.block_rollback()
+
+    # always store Nate's current state right before leaving it
+    $ sam_side_story_store_main_state()
+    $ sam_side_story_mode = True
+
+    # if Sam already has her own branch state, just load it
+    if sam_side_story_has_branch_state():
+        $ sam_side_story_apply_state(sam_side_story_branch_state)
+        call sam_side_story_rebuild_world
+        jump sam_side_story_hub
+
+    # first ever entry: clone current save into a new branch
+    $ sam_side_story_make_new_branch_state()
+    $ sam_side_story_apply_state(sam_side_story_branch_state)
+
+    # now turn that copied save into Sam's own fresh branch
+    call sam_side_story_initialize_branch
+    call sam_side_story_rebuild_world
+
+    # save the fresh Sam branch so future entries come back to it
+    $ sam_side_story_store_branch_state()
+
+    jump sam_side_story_intro
+
+label sam_side_story_exit:
+    $ renpy.block_rollback()
+
+    # save Sam's current branch before leaving it
+    $ sam_side_story_store_branch_state()
+
+    # leave Sam mode first
+    $ sam_side_story_mode = False
+    $ sam_side_story_draw_real_nate = False
+
+    # restore Nate's saved state
+    if sam_side_story_main_state is not None:
+        $ sam_side_story_apply_state(sam_side_story_main_state)
+
+    call sam_side_story_rebuild_world
+
+    # go back to wherever Nate was when you entered the branch
+    $ advance_time_return_location.start(force_music_change = True)
+    return
+
+label sam_side_story_rebuild_world:
+    # when we swap states, the room placement data sitting around is stale.
+    # this clears it and lets the normal day rebuild put everyone back.
+    $ clear_characters()
+    call day_reset_locations_chars
+    return
+
+label sam_side_story_upgrade_branch:
+    # older branch copies were made before the side story had its own clean misc stats
+    # and relationship levels. reset those once, then keep the branch from there.
+    $ sam_side_story_clear_all_pending_content()
+    $ sam_side_story_reset_misc_stats()
+    return
+
+label sam_side_story_initialize_branch:
+    # first entry begins as a copy of the normal save, then we turn it into Sam's own branch.
+
+    # wipe out any queued nate-route scenes or talks so the branch starts clean.
+    $ sam_side_story_clear_all_pending_content()
+
+    # give Sam her own fresh misc stats and relationship progress
+    $ sam_side_story_reset_misc_stats()
+
+    # now set the branch up to play as Sam
+    $ player_character = sa
+    $ advance_time_return_location = sam_room
+    $ stats.current_location = sam_room
+    $ stats.current_zone = sam_room.zone()
+    $ last_selected_character = sa
+    $ week.time = "day"
+
+    return
+
+label sam_side_story_intro:
+    scene black
+    with Dissolve(0.5)
+
+    #"sam side story intro goes here."
+    #"when you're done with the intro, jump to the side story hub or the next scene."
+
+    jump sam_side_story_hub
+
+label sam_side_story_hub:
+    window hide
+    $ renpy.scene('screens')
+    show screen hud_zone_select
+    show screen hud
+
+    menu:
+        "Sam Side Story"
+        "Go to Sam's room":
+            $ advance_time_return_location = sam_room
+            $ stats.current_location = sam_room
+            $ stats.current_zone = sam_room.zone()
+            $ sam_room.start(force_music_change = True)
+        "Leave the side story":
+            jump sam_side_story_exit
+
+    jump sam_side_story_hub
+
+label sam_side_story_room_empty:
+    $ renpy.set_return_stack([])
+    $ renpy.checkpoint()
+    $ quick_menu = True
+    $ enable_saving()
+    $ enable_rollback()
+
+    show screen hud_zone_select
+    show screen hud
+
+    python hide:
+        renpy.start_predict_screen("gallery")
+        for char in npc_list():
+            renpy.start_predict_screen("character_gallery", char)
+
+    python:
+        chosen_option = renpy.display_menu(sam_side_story_nate_room_empty_choices())
+
+    if chosen_option == "back":
+        call navigation_menu()
+    elif chosen_option == "nate_room_rename_characters":
+        call sam_side_story_rename_characters
+    elif chosen_option == "nate_room_changelog":
+        call sam_side_story_changelog
+    elif chosen_option == "nate_room_shopping":
+        call sam_side_story_shopping
+    elif chosen_option == "nate_room_shopping_general":
+        call sam_side_story_shopping_general
+    elif chosen_option == "nate_room_minigame":
+        call sam_side_story_minigame
+    elif chosen_option == "nate_room_finale_scene_revisit_confirm":
+        call sam_side_story_finale_scene_revisit_confirm
+
+    else:
+        $ renpy.call(chosen_option)
+
+    return
+
+label sam_side_story_nate_room_empty:
+    $ renpy.set_return_stack([])
+    $ renpy.checkpoint()
+    $ quick_menu = True
+    $ enable_saving()
+    $ enable_rollback()
+
+    show screen hud_zone_select
+    show screen hud
+
+    menu:
+        "Back":
+            call navigation_menu()
+
+    return
+
+label sam_side_story_finale_scene_revisit_confirm:
+    "{i}Call everyone to setup a party?{/i}"
+    menu:
+        "Yes":
+            jump finale_scene_revisit
+        "No":
+            jump sam_side_story_room_empty
+
+    return
+
+label sam_side_story_rename_characters:
+    $ renpy.scene('screens')
+
+    $ process_character(si, "position right")
+    call change_character_name(si, "My Mom")
+
+    $ clear_characters()
+    $ process_character(k, "position right")
+    call change_character_name(k, "My sister")
+
+    $ clear_characters()
+    $ process_character(sa, "position right")
+    call change_character_name(sa, "My name")
+
+    if had_julia_arrived_scene:
+        $ clear_characters()
+        $ process_character(julia, "position right")
+        call change_character_name(julia, "My cousin")
+
+    if had_janet_intro_scene:
+        $ clear_characters()
+        $ process_character(janet, "position right")
+        call change_character_name(janet, "My Aunt")
+
+    if had_edna_intro_scene:
+        $ clear_characters()
+        $ process_character(edna, "position right")
+        call change_character_name(edna, "My Grandma")
+
+    $ clear_characters()
+    $ sam_side_story_draw_real_nate = True
+    $ process_character(n, "position right")
+    $ sam_side_story_draw_real_nate = False
+    call change_character_name(n, "My twin brother")
+
+    python:
+        last_name = renpy.input("My last name", default = last_name, length = 14)
+
+    call update_last_names
+    $ clear_characters()
+
+    call sam_side_story_room_empty
+
+    return
+
+label sam_side_story_changelog:
+    $ quick_menu = False
+    $ renpy.scene('screens')
+    show screen changelog
+    pause
+    $ renpy.scene('screens')
+    jump sam_side_story_room_empty
+    return
+
+label sam_side_story_shopping:
+    menu:
+        "General Goods":
+            call sam_side_story_shopping_general
+        "Back":
+            call sam_side_story_room_empty
+
+    return
+
+label sam_side_story_shopping_general:
+    window hide
+    call buy_menu(visible_items_with_tag("general"), "sam_side_story_shopping", "sam_side_story_shopping_general")
+    return
+
+label sam_side_story_minigame:
+    menu:
+        "Game Review Typing Minigame":
+            call minigame_typing_review
+        "Back":
+            call sam_side_story_room_empty
+    return
+
+label sam_side_story_debug_status:
+    "sam_side_story_mode = [store.sam_side_story_mode]\nside_story_enabled = [persistent.side_story_enabled]"
+    call sam_side_story_room_empty
+    return
+
+init 1000 python:
+    leftovers_old_fuckable_npc_list = fuckable_npc_list
+
+    def fuckable_npc_list():
+        char_list = leftovers_old_fuckable_npc_list()
+
+        # in Sam's side story, Sam is the player,
+        # so don't count her as a separate girl in stat summaries
+        if store.sam_side_story_mode and store.sa in char_list:
+            char_list.remove(store.sa)
+
+        return char_list
+
+init 9999 python:
+    leftovers_old_relationship_screen_characters = relationship_screen_characters
+
+    def relationship_screen_characters():
+        char_list = [char for char in npc_list() if char.show_on_stat_screen()]
+
+        if store.sam_side_story_mode and store.sa in char_list:
+            char_list.remove(store.sa)
+
+        return char_list
+
+init 999:
+    screen main_menu():
+        tag menu
+
+        add "gui/main_menu.png"
+
+        text config.name style "default" size 120 xalign 0.5
+
+        vbox:
+            xalign 0.95
+            yalign 0.4
+            spacing 30
+
+            use main_menu_button(text = "New Game", action = Start("story_select_start"))
+
+            if not wholesome_mode:
+                use main_menu_button(text = "Load Game", action = ShowMenu("load"))
+
+            use main_menu_button(text = "Options", action = ShowMenu("preferences"))
+            use main_menu_button(text = "FAQ", action = Jump("help"))
+            use main_menu_button(text = "Quit", action = Quit(confirm = not main_menu))
+
+label story_select_start:
+    $ quick_menu = False
+    call screen story_select
+    return
+
+transform story_card_idle:
+    alpha 0.95
+
+transform story_card_hover:
+    alpha 1.0
+    matrixcolor BrightnessMatrix(0.08)
+
+screen story_select():
+    tag menu
+    modal True
+    default hovered_story = None
+
+    add Solid("#000")
+
+    fixed:
+        xfill True
+        yfill True
+
+    # nate card - left
+    button:
+        xsize 660
+        ysize 920
+        xpos 170
+        ypos 120
+
+        action Jump("start")
+        hovered SetScreenVariable("hovered_story", "nate")
+        unhovered SetScreenVariable("hovered_story", None)
+
+        # border (changes color on hover)
+        if hovered_story == "nate":
+            add Transform(Solid("#a223cc33"), xsize=660, ysize=920)
+            add Solid("#ffffff08", xsize=652, ysize=912, xpos=4, ypos=4)
+        else:
+            add Transform(Solid("#ffffff"), xsize=660, ysize=920)
+
+        # background fill to match Sam's card feel
+        add Solid("#1a1a1a", xsize=652, ysize=912, xpos=4, ypos=4)
+
+        add Transform(
+            "mods/leftovers_mod/images/natetest.png",
+            fit="cover",
+            xsize=652,
+            ysize=912,
+            xpos=4,
+            ypos=4
+        ) at (story_card_hover if hovered_story == "nate" else story_card_idle)
+
+
+    # sam card - right
+    button:
+        xsize 660
+        ysize 920
+        xpos 1090
+        ypos 120
+
+        action Jump("sam_side_story_new_game_start")
+        hovered SetScreenVariable("hovered_story", "sam")
+        unhovered SetScreenVariable("hovered_story", None)
+
+        # border
+        if hovered_story == "sam":
+            add Transform(Solid("#f2d75a33"), xsize=660, ysize=920)
+            add Solid("#ffffff08", xsize=652, ysize=912, xpos=4, ypos=4)
+        else:
+            add Transform(Solid("#ffffff"), xsize=660, ysize=920)
+
+        # image
+        add Transform(
+            "mods/leftovers_mod/images/samtest.png",
+            fit="cover",
+            xsize=652,
+            ysize=912,
+            xpos=4,
+            ypos=4
+        ) at (story_card_hover if hovered_story == "sam" else story_card_idle)
+
+    text "Choose Your Story":
+        xalign 0.5
+        ypos 18
+        size 58
+        outlines [ (absolute(3), "#000", absolute(0), absolute(0)) ]
+
+    use back_button(click_action = Return(), xalign = 0.98, yalign = 0.98)
